@@ -22,7 +22,7 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
 
 st.set_page_config(layout="wide")
-st.title("Performance Business Analysis")
+st.title("Business Intelligent Dashboard")
 
 # ==========================================
 # INPUT
