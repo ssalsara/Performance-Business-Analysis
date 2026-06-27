@@ -17,8 +17,9 @@ from nltk.corpus import stopwords
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 
 import nltk
-nltk.download('stopwords')
-
+# nltk.download('stopwords')
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import MinMaxScaler
 
 st.set_page_config(layout="wide")
 st.title("Performance Business Analysis")
@@ -99,14 +100,7 @@ def clean_text(text):
 
     return " ".join(words)
 
-tab1, tab2, tab3, tab4 = st.tabs(
-[
-"📩 Chat Analysis",
-"💰 Profit Analysis",
-"📈 Traffic Analysis",
-"📥 Summary and Export"
-]
-)
+tab1, tab2, tab3, tab4= st.tabs(["📩 Chat Analysis","💰 Profit Analysis","📈 Traffic Analysis and Summary","🎯 Promo Recommendation and Export"])
 
 
 missing_files = []
@@ -127,276 +121,101 @@ if missing_files:
 # CHAT
 # ==========================================
 with tab1:
-    top_word = st.slider(
-        "Top kata yang ditampilkan",
-        5,
-        50,
-        20)
-    top_produk = st.slider(
-        "Top barang yang ditampilkan",
-        5,
-        50,
-        20)    
+    top_word = st.slider("Top kata yang ditampilkan",5,50,20)
+    top_produk = st.slider("Top barang yang ditampilkan",5,50,20)    
     if uploaded_chat:
-
         chat_df = pd.read_excel(uploaded_chat)
-
         # tanggal chat
-        chat_df['waktuchat'] = pd.to_datetime(
-            chat_df['waktuchat']
-        )
-
+        chat_df['waktuchat'] = pd.to_datetime(chat_df['waktuchat'])
         # waktu dijawab
-        chat_df['waktuchat_jawab'] = pd.to_datetime(
-            chat_df['waktuchat_jawab']
-        )
-
+        chat_df['waktuchat_jawab'] = pd.to_datetime(chat_df['waktuchat_jawab'])
         # jam
         chat_df['jam_chat'] = chat_df['waktuchat'].dt.hour
-
-        chat_df['jam_jawab'] = chat_df[
-            'waktuchat_jawab'
-        ].dt.hour
-
+        chat_df['jam_jawab'] = chat_df['waktuchat_jawab'].dt.hour
         # clean pesan
         chat_df['clean_pesan'] = chat_df['pesan'].apply(clean_text)
-
         st.success("Data berhasil diproses")
-
-        # ===================================================
         # 1 WORD FREQUENCY
-        # ===================================================
-
         rows = []
-
         for _, row in chat_df.iterrows():
             kata_list = str(row['clean_pesan']).split()
             kategori = row['kategori']
-
             for kata in kata_list:
                 rows.append([kata, kategori])
-
         kata_df = pd.DataFrame(rows, columns=['Kata', 'Kategori'])
-
         # total frekuensi kata
-        freq_kata = (
-            kata_df.groupby('Kata')
-            .size()
-            .reset_index(name='Frekuensi')
-        )
+        freq_kata = (kata_df.groupby('Kata').size().reset_index(name='Frekuensi'))
 
         # kategori yang paling sering untuk tiap kata
-        kategori_terbanyak = (
-            kata_df.groupby('Kata')['Kategori']
-            .agg(lambda x: x.mode().iloc[0])
-            .reset_index()
-        )
-
-        word_df = (
-            freq_kata
-            .merge(kategori_terbanyak, on='Kata')
-            .sort_values(by='Frekuensi', ascending=False)
-        )
-
+        kategori_terbanyak = (kata_df.groupby('Kata')['Kategori'].agg(lambda x: x.mode().iloc[0]).reset_index())
+        word_df = (freq_kata.merge(kategori_terbanyak, on='Kata').sort_values(by='Frekuensi', ascending=False))
         word_df = word_df.head(top_word)
-
         fig1, ax1 = plt.subplots(figsize=(10,5))
-
-        sns.barplot(
-            data=word_df,
-            x='Frekuensi',
-            y='Kata',
-            ax=ax1, errorbar=None
-        )
+        sns.barplot(data=word_df,x='Frekuensi',y='Kata',ax=ax1, errorbar=None)
         ax1.set_title("Top Kata yang Paling Sering Muncul")
         st.subheader("🔤 Kata Paling Sering Muncul")
         st.pyplot(fig1)
-
-        selected_word = st.selectbox(
-            "Pilih kata",
-            word_df['Kata']
-        )
-
-        contoh_pesan = (
-            chat_df[
-                chat_df['clean_pesan'].str.contains(
-                    selected_word,
-                    case=False,
-                    na=False
-                )
-            ][['nama','clean_pesan','kategori']]
-            .head(top_word)
-        )
+        selected_word = st.selectbox("Pilih kata",word_df['Kata'])
+        contoh_pesan = (chat_df[chat_df['clean_pesan'].str.contains(selected_word,case=False,na=False)][['nama','clean_pesan','kategori']].head(top_word))
 
         st.dataframe(contoh_pesan)
-
-        # ===================================================
         # 2 PRODUK
-        # ===================================================
-
-        produk_df = (
-            chat_df['produk']
-            .value_counts()
-            .reset_index()
-        )
-
+        produk_df = (chat_df['produk'].value_counts().reset_index())
         produk_df.columns=['Produk','Jumlah']
-
         produk_df = produk_df.head(top_produk)
-
         fig2, ax2 = plt.subplots(figsize=(10,5))
-
-        sns.barplot(
-            data=produk_df,
-            x='Jumlah',
-            y='Produk',
-            ax=ax2
-        )
+        sns.barplot(data=produk_df,x='Jumlah',y='Produk',ax=ax2)
         st.subheader("📝 Produk Paling Banyak Ditanyakan")
         ax2.set_xticks(range(0, produk_df['Jumlah'].max()+1))
         st.pyplot(fig2)
-        selected_product = st.selectbox(
-            "Pilih produk",
-            produk_df['Produk']
-        )
+        selected_product = st.selectbox("Pilih produk",produk_df['Produk'])
 
-        detail_produk = (
-            chat_df[
-                chat_df['produk']==selected_product
-            ][[
-                'nama',
-                'pesan',
-                'checkout',
-                'alasan tidak co'
-            ]]
-        )
+        detail_produk = (chat_df[chat_df['produk']==selected_product][['nama','pesan','checkout','alasan tidak co']])
 
         st.dataframe(detail_produk)
-        # ===================================================
         # CHECKOUT ANALYSIS
-        # ===================================================
-        checkout_df = (
-            chat_df['checkout']
-            .value_counts()
-            .reset_index()
-        )
-
-        checkout_df.columns=[
-            'Checkout',
-            'Jumlah'
-        ]
-
+        checkout_df = (chat_df['checkout'].value_counts().reset_index())
+        checkout_df.columns=['Checkout','Jumlah']
         fig10, ax10 = plt.subplots()
-
-        ax10.pie(
-            checkout_df['Jumlah'],
-            labels=checkout_df['Checkout'],
-            autopct='%1.1f%%'
-        )
-
+        ax10.pie(checkout_df['Jumlah'],labels=checkout_df['Checkout'],autopct='%1.1f%%')
         st.subheader("💰 Checkout Analysis")
-
         st.pyplot(fig10)
-        # ===================================================
         # CHECKOUT ANALYSIS
-        # ===================================================
-        alasan_df = (
-            chat_df['alasan tidak co']
-            .value_counts()
-            .reset_index()
-        )
-
-        alasan_df.columns=[
-            'Alasan',
-            'Jumlah'
-        ]
-
+        alasan_df = (chat_df['alasan tidak co'].value_counts().reset_index())
+        alasan_df.columns=['Alasan','Jumlah']
         fig11, ax11 = plt.subplots(figsize=(10,5))
-
-        sns.barplot(
-            data=alasan_df,
-            x='Jumlah',
-            y='Alasan',
-            ax=ax11
-        )
-
+        sns.barplot(data=alasan_df,x='Jumlah',y='Alasan',ax=ax11)
         st.subheader("❌ Alasan Tidak Checkout")
-
         st.pyplot(fig11)
-        # ===================================================
         # JAM CHAT MASUK
-        # ===================================================
-        jam_chat = (
-            chat_df['jam_chat']
-            .value_counts()
-            .sort_index()
-        )
-
+        jam_chat = (chat_df['jam_chat'].value_counts().sort_index())
         fig3, ax3 = plt.subplots(figsize=(12,5))
-
-        jam_chat.plot(
-            kind='bar',
-            ax=ax3
-        )
-
+        jam_chat.plot(kind='bar',ax=ax3)
         st.subheader("Jam Chat Masuk")
-
         st.pyplot(fig3)
-
         ramai_chat = jam_chat.idxmax()
-
-        st.info(
-            f"Jam paling ramai pelanggan menghubungi adalah sekitar pukul {ramai_chat}:00"
-        )
-
-
-        # ===================================================
+        st.info(f"Jam paling ramai pelanggan menghubungi adalah sekitar pukul {ramai_chat}:00")
         # JAM CS MENJAWAB
-        # ===================================================
-        jam_jawab = (
-            chat_df['jam_jawab']
-            .value_counts()
-            .sort_index()
-        )
-
+        jam_jawab = (chat_df['jam_jawab'].value_counts().sort_index())
         fig4, ax4 = plt.subplots(figsize=(12,5))
-
-        jam_jawab.plot(
-            kind='bar',
-            ax=ax4
-        )
-
+        jam_jawab.plot(kind='bar',ax=ax4)
         st.subheader("Jam CS Menjawab")
-
         st.pyplot(fig4)
-
         ramai_jawab = jam_jawab.idxmax()
-
-        st.info(
-            f"Jam CS paling aktif menjawab adalah sekitar pukul {ramai_jawab}:00"
-        )
-        # ===================================================
+        st.info(f"Jam CS paling aktif menjawab adalah sekitar pukul {ramai_jawab}:00")
         # DURASI MENJAWAB
-        # ===================================================
         st.subheader("⏱️ Rata-rata Waktu Balas CS")
-
         durasi_cols = [c for c in chat_df.columns if "durasi" in c.lower()]
-
         if durasi_cols:
             durasi_col = durasi_cols[0]
-
             chat_df[durasi_col] = pd.to_numeric(chat_df[durasi_col], errors="coerce")
-
             st.write(chat_df[durasi_col].describe())
-
-            st.success(
-                f"🔥 Rata-rata waktu balas CS: **{chat_df[durasi_col].mean():.1f} menit**"
-            )
+            st.success(f"🔥 Rata-rata waktu balas CS: **{chat_df[durasi_col].mean():.1f} menit**")
         else:
             st.info("Kolom durasi tidak ditemukan.")
-        # ===================================================
-        # TOP VIEW
-        # ===================================================
+# ===================================================
+# TOP VIEW
+# ===================================================
 with tab2:
     if uploaded_profit:
         profit_df = pd.read_excel(uploaded_profit)
@@ -408,384 +227,233 @@ with tab2:
             col_produk = "Produk"
         elif "Nama produk" in profit_df.columns:
             col_produk = "Nama produk"
-        view_df = (
-        profit_df
-        .groupby(col_produk)[col_view]
-        .sum()
-        .reset_index()
-        .sort_values(col_view, ascending=False)
-        .head(top_produk)
-        )
+        view_df = (profit_df.groupby(col_produk)[col_view].sum().reset_index().sort_values(col_view, ascending=False).head(top_produk))
         fig5, ax5 = plt.subplots(figsize=(10,5))
-
-        sns.barplot(
-            data=view_df,
-            y=col_produk,
-            x=col_view,
-            ax=ax5
-        )
+        sns.barplot(data=view_df,y=col_produk,x=col_view,ax=ax5)
         st.subheader("👀 Top Barang Dilihat")
         st.pyplot(fig5)
-
         st.dataframe(view_df)
-
-        # ===================================================
         # KERANJANG
-        # ===================================================
         if "Dimasukkan ke Keranjang (Produk)" in profit_df.columns:
             col_cart = "Dimasukkan ke Keranjang (Produk)"
         elif "Klik hingga Menambahkan Produk ke Keranjang" in profit_df.columns:
             col_cart = "Klik hingga Menambahkan Produk ke Keranjang"
-        cart_df = (
-        profit_df
-        .groupby(col_produk)[col_cart]
-        .sum()
-        .reset_index()
-        .sort_values(col_cart, ascending=False)
-        .head(top_produk))
+        cart_df = (profit_df.groupby(col_produk)[col_cart].sum().reset_index().sort_values(col_cart, ascending=False).head(top_produk))
         fig6, ax6 = plt.subplots(figsize=(10,5))
-
-        sns.barplot(
-            data=cart_df,
-            y=col_produk,
-            x=col_cart,
-            ax=ax6
-        )
-
+        sns.barplot(data=cart_df,y=col_produk,x=col_cart,ax=ax6)
         st.subheader("🛒 Top Barang Ditambahkan Keranjang")
         st.pyplot(fig6)
         st.dataframe(cart_df)
-        # ===================================================
         # UANG
-        # ===================================================
         if "Penjualan (Pesanan Siap Dikirim) (IDR)" in profit_df.columns:
             col_sales = "Penjualan (Pesanan Siap Dikirim) (IDR)"
         elif "GMV (Rp)" in profit_df.columns:
-            col_sales = "GMV (Rp)"
-    
-        sales_df = (
-        profit_df
-        .groupby(col_produk)[col_sales]
-        .sum()
-        .reset_index()
-        .sort_values(col_sales, ascending=False)
-        .head(top_produk))
+            col_sales = "GMV (Rp)"    
+        sales_df = (profit_df.groupby(col_produk)[col_sales].sum().reset_index().sort_values(col_sales, ascending=False).head(top_produk))
         fig7, ax7 = plt.subplots(figsize=(10,5))
-        sns.barplot(
-            data=sales_df,
-            y=col_produk,
-            x=col_sales,
-            ax=ax7
-        )
+        sns.barplot(data=sales_df,y=col_produk,x=col_sales,ax=ax7)
         ax7.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f'Rp{x:,.0f}'))
         st.subheader("💵 Top Barang Terlaris (Uang)")
         st.pyplot(fig7)
         sales_df[col_sales] = sales_df[col_sales].map(lambda x: f"Rp{x:,.0f}")
         st.dataframe(sales_df)
-
-        # ===================================================
         # KUANTITAS
-        # ===================================================
         if "Produk (Pesanan Siap Dikirim)" in profit_df.columns:
             col_qty = "Produk (Pesanan Siap Dikirim)"
         elif "Pesanan SKU" in profit_df.columns:
             col_qty = "Pesanan SKU"
-    
-        qty_df = (
-        profit_df
-        .groupby(col_produk)[col_qty]
-        .sum()
-        .reset_index()
-        .sort_values(col_qty, ascending=False)
-        .head(top_produk))
+        qty_df = (profit_df.groupby(col_produk)[col_qty].sum().reset_index().sort_values(col_qty, ascending=False).head(top_produk))
         fig8, ax8 = plt.subplots(figsize=(10,5))
-
-        sns.barplot(
-            data=qty_df,
-            y=col_produk,
-            x=col_qty,
-            ax=ax8
-        )
-
+        sns.barplot(data=qty_df,y=col_produk,x=col_qty,ax=ax8)
         st.subheader("🛎️ Top Barang Terlaris (Kuantitas)")
         st.pyplot(fig8)
         st.dataframe(qty_df)
 
 with tab3:
-        # ===================================================
-        # PENGUNJUNG BARU
-        # ===================================================
+# ===================================================
+# PENGUNJUNG BARU
+# ===================================================
     if uploaded_traffic:
         traffic_df = pd.read_excel(uploaded_traffic)
         if "Pengunjung Baru" in traffic_df.columns:
             visitor_new = traffic_df["Pengunjung Baru"].sum()
         elif "Klik Unik" in traffic_df.columns:
             visitor_new = traffic_df["Klik Unik"].sum()
-        st.metric(
-        "🆕 Pengunjung Baru",
-        f"{visitor_new:,.0f}")
-        # ===================================================
         # PENGUNJUNG LAMA
-        # ===================================================
         if "Pengunjung Lama" in traffic_df.columns:
             visitor_old = traffic_df["Pengunjung Lama"].sum()
         elif "Klik" in traffic_df.columns:
             visitor_old = (traffic_df["Klik"].sum()-traffic_df["Klik Unik"].sum())
-        st.metric(
-        "♻ Pengunjung Lama",
-        f"{visitor_old:,.0f}")
-        # ===================================================
         # TOTAL PENGUNJUNG
-        # ===================================================
         if "Total Pengunjung" in traffic_df.columns:
             col_visitor = "Total Pengunjung"
         elif "Klik" in traffic_df.columns:
             col_visitor = "Klik"
-
         if "Tanggal" in traffic_df.columns:
             tanggal_col = "Tanggal"
-            traffic_df[tanggal_col] = pd.to_datetime(
-                traffic_df[tanggal_col],
-                format='%d-%m-%Y',
-                errors='coerce'
-            )
-
+            traffic_df[tanggal_col] = pd.to_datetime(traffic_df[tanggal_col],format='%d-%m-%Y',errors='coerce')
         elif "Waktu" in traffic_df.columns:
             tanggal_col = "Waktu"
-            traffic_df[tanggal_col] = pd.to_datetime(
-                traffic_df[tanggal_col],
-                format='%Y-%m-%d',
-                errors='coerce'
-            )
-
+            traffic_df[tanggal_col] = pd.to_datetime(traffic_df[tanggal_col],format='%Y-%m-%d',errors='coerce')
         # Jumlah pengunjung per hari
-        traffic_daily = (
-            traffic_df
-            .groupby(tanggal_col)[col_visitor]
-            .sum()
-            .reset_index()
-        )
-
+        traffic_daily = (traffic_df.groupby(tanggal_col)[col_visitor].sum().reset_index())
         fig9, ax9 = plt.subplots(figsize=(12,5))
-
-        sns.lineplot(
-            data=traffic_daily,
-            x=tanggal_col,
-            y=col_visitor,
-            marker='o',
-            ax=ax9
-        )
-
-        st.metric(
-            "👥 Total Pengunjung",
-            f"{traffic_daily[col_visitor].sum():,.0f}"
-        )
+        sns.lineplot(data=traffic_daily,x=tanggal_col,y=col_visitor,marker='o',ax=ax9)
+        col1,col2,col3,col4,col5,col6 = st.columns(6)
+        with col1:
+             if uploaded_traffic:
+                st.metric("🆕 Pengunjung Baru",f"{visitor_new:,.0f}")
+        with col2:
+             if uploaded_traffic:
+                st.metric("♻ Pengunjung Lama",f"{visitor_old:,.0f}")
+        with col3:
+             if uploaded_traffic: 
+                st.metric("👥 Total Pengunjung",f"{traffic_daily[col_visitor].sum():,.0f}")                                   
+        with col4:
+            if uploaded_chat:
+                st.metric("Jumlah Chat",len(chat_df))
+        with col5:
+            if uploaded_traffic and 'traffic_daily' in locals():
+                top_day = traffic_daily.loc[traffic_daily[col_visitor].idxmax()]
+                st.metric("Hari Teramai",top_day[tanggal_col].strftime("%d-%m-%Y"),f"{top_day[col_visitor]:,.0f} pengunjung")
+        with col6:
+            if uploaded_chat:
+                st.metric("Peak Hour",f"{ramai_chat}:00")
         ax9.set_xlabel("Tanggal")
         ax9.set_ylabel("Jumlah Pengunjung")
-
         st.subheader("📈 Total Pengunjung")
         st.pyplot(fig9)
+with tab4:     
+    if uploaded_chat and uploaded_profit:
+        st.header("🎯 AI Promo Recommendation")
+        sales_df[col_sales] = (
+            sales_df[col_sales]
+            .astype(str)
+            .str.replace("Rp", "", regex=False)
+            .str.replace(".", "", regex=False)
+            .str.replace(",", ".", regex=False)
+            .str.strip()
+        )
 
+        sales_df[col_sales] = pd.to_numeric(
+            sales_df[col_sales],
+            errors="coerce"
+        ).fillna(0)        
+        produk_chat = (chat_df.groupby("produk").size().reset_index(name="Ditanya"))
+        # rename
+        view_merge = view_df.rename(columns={col_produk:"produk",col_view:"Dilihat"})
+        cart_merge = cart_df.rename(columns={col_produk:"produk",col_cart:"Keranjang"})
+        sales_merge = sales_df.rename(columns={col_produk:"produk",col_sales:"GMV"})
+        qty_merge = qty_df.rename(columns={col_produk:"produk",col_qty:"Terjual"})
+        # merge
+        promo_df = produk_chat.merge(view_merge,on="produk",how="outer")
+        promo_df = promo_df.merge(cart_merge,on="produk",how="outer")
+        promo_df = promo_df.merge(sales_merge,on="produk",how="outer")
+        promo_df = promo_df.merge(qty_merge,on="produk",how="outer")
+        promo_df.fillna(0,inplace=True)
+        #normalisasi
+        scaler = MinMaxScaler()
+        fitur = ["Ditanya","Dilihat","Keranjang","GMV","Terjual"]
+        promo_df[fitur] = np.log1p(promo_df[fitur])
+        promo_df[fitur] = scaler.fit_transform(promo_df[fitur])      
+        # weighted score 
+        promo_df["Score"]=(0.30*promo_df["Ditanya"]+0.30*promo_df["Dilihat"]+0.20*promo_df["Keranjang"]+0.10*promo_df["GMV"]+0.10*promo_df["Terjual"]) 
+        # ml
+        kmeans=KMeans(n_clusters=3,random_state=42)
+        promo_df["Cluster"]=kmeans.fit_predict(promo_df[fitur])
+        promo_df = promo_df.sort_values("Score",ascending=False) 
+        # label cluster
+        cluster_mean=(promo_df.groupby("Cluster")["Score"].mean().sort_values())
+        cluster_rank={}
+        cluster_rank[cluster_mean.index[0]]="Low"
+        cluster_rank[cluster_mean.index[1]]="Medium"
+        cluster_rank[cluster_mean.index[2]]="High"    
+        promo_df["Potensi"]=promo_df["Cluster"].map(cluster_rank)
+        # ranking
+        promo_df=promo_df.sort_values("Score",ascending=False)    
+        #metric
+        top_produk=promo_df.iloc[0] 
+        col1,col2,col3=st.columns(3)
+        col1.metric("Produk Terbaik",top_produk["produk"])
+        col2.metric("Promo Score",f"{top_produk['Score']*100:.1f}")
+        col3.metric("Cluster",top_produk["Potensi"])
+        # bar chart
+        fig_promo,ax=plt.subplots(figsize=(10,6))
+        sns.barplot(
+        data=promo_df.head(10),x="Score",y="produk",hue="Potensi",ax=ax)
+        st.pyplot(fig_promo)
+        # scatter plot AI
+        fig_cluster,ax=plt.subplots(figsize=(8,6))
+        sns.scatterplot(data=promo_df,x="Dilihat",y="Keranjang",hue="Potensi",size="Score",sizes=(50,400),ax=ax)
+        st.pyplot(fig_cluster)   
+        #  insight
+        for _,row in promo_df.head(5).iterrows():
+            st.success(
+
+        f"""
+        **{row['produk']}**
+        ⭐ Score : {row['Score']*100:.1f}
+        Kategori :
+        {row['Potensi']}
+        Direkomendasikan menjadi produk promo karena memiliki tingkat perhatian pelanggan yang tinggi berdasarkan jumlah pencarian, jumlah kunjungan produk, aktivitas keranjang, serta performa penjualan historis.
+        """
+        )
         def save_chart(workbook,fig,sheet,pos="E2"):
 
-                with tempfile.NamedTemporaryFile(
-                        suffix=".png",
-                        delete=False
-                    ) as tmp:
-
-                        fig.savefig(
-                            tmp.name,
-                            bbox_inches='tight'
-                        )
-
+                with tempfile.NamedTemporaryFile(suffix=".png",delete=False) as tmp:
+                        fig.savefig(tmp.name,bbox_inches='tight')
                         img = Image(tmp.name)
-
-                        workbook[sheet].add_image(
-                            img,
-                            pos
-                        )
+                        workbook[sheet].add_image(img,pos)
     output = None
     if uploaded_chat and uploaded_profit and uploaded_traffic:    
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-
-                # ===================
                 # Executive Summary
-                # ===================
-
                 summary_df = pd.DataFrame({
-                    "Metrik":[
-                        "Jumlah Chat",
-                        "Jumlah Produk",
-                        "Jumlah Kategori",
-                        "Jam Chat Tersibuk",
-                        "Jam CS Paling Aktif",
-                        "Durasi Rata-Rata Jawab",
-                        "Pengunjung Baru",
-                        "Pengunjung Lama",
-                        "Total Pengunjung"
-                    ],
-
-                    "Nilai":[
-                        len(chat_df),
-                        chat_df['produk'].nunique(),
-                        chat_df['kategori'].nunique(),
-                        f"{ramai_chat}:00",
-                        f"{ramai_jawab}:00",
-                        f"{chat_df[durasi_col].mean():.1f} menit",
-                        f"{visitor_new:,.0f}",
-                        f"{visitor_old:,.0f}",
-                        f"{traffic_daily[col_visitor].sum():,.0f}"
-                    ]
-                })
-
-                summary_df.to_excel(
-                    writer,
-                    sheet_name="Executive Summary",
-                    index=False
-                )
-
-
-                # ===================
+                    "Metrik":["Jumlah Chat","Jumlah Produk","Jumlah Kategori","Jam Chat Tersibuk","Jam CS Paling Aktif", "Durasi Rata-Rata Jawab","Pengunjung Baru","Pengunjung Lama","Total Pengunjung"],
+                    "Nilai":[len(chat_df),chat_df['produk'].nunique(),chat_df['kategori'].nunique(),f"{ramai_chat}:00",f"{ramai_jawab}:00",f"{chat_df[durasi_col].mean():.1f} menit",f"{visitor_new:,.0f}",f"{visitor_old:,.0f}",f"{traffic_daily[col_visitor].sum():,.0f}"]})
+                summary_df.to_excel(writer,sheet_name="Executive Summary",index=False)
                 # Top Words
-                # ===================
-
-                contoh_pesan.to_excel(
-                    writer,
-                    sheet_name="Top Words",
-                    index=False
-                )
-
-                # ===================
+                contoh_pesan.to_excel(writer,sheet_name="Top Words",index=False)
                 # Jam Chat
-                # ===================
-
-                jam_chat.reset_index().to_excel(
-                    writer,
-                    sheet_name="Jam Chat",
-                    index=False
-                )
-
-
-                # ===================
+                jam_chat.reset_index().to_excel(writer,sheet_name="Jam Chat",index=False)
                 # Jam Jawab
-                # ===================
-
-                jam_jawab.reset_index().to_excel(
-                    writer,
-                    sheet_name="Jam Jawab",
-                    index=False
-                )
-                # ===================
+                jam_jawab.reset_index().to_excel(writer,sheet_name="Jam Jawab",index=False)
                 # Produk Tanya
-                # ===================
-                detail_produk.to_excel(
-                    writer,
-                    sheet_name="Produk Tanya",
-                    index=False
-                )
-                # ===================
+                detail_produk.to_excel(writer,sheet_name="Produk Tanya",index=False)
                 # Top View
-                # ===================
-                view_df.to_excel(
-                    writer,
-                    sheet_name="Top View",
-                    index=False
-                )
-                # ===================
+                view_df.to_excel(writer,sheet_name="Top View",index=False)
                 # Keranjang
+                cart_df.to_excel(writer,sheet_name="Keranjang",index=False)
+                # Uang
                 # ===================
-                cart_df.to_excel(
-                    writer,
-                    sheet_name="Keranjang",
-                    index=False
-                )
-                # ===================
-                # UANG
-                # ===================
-                sales_df.to_excel(
-                    writer,
-                    sheet_name="Terlaris (Uang)",
-                    index=False
-                )           
-                # ===================
-                # KUANTITAS
-                # ===================
-                qty_df.to_excel(
-                    writer,
-                    sheet_name="Terlaris (Kuantitas)",
-                    index=False
-                ) 
-                # ===================
+                sales_df.to_excel(writer,sheet_name="Terlaris (Uang)",index=False)           
+                # Kuantitas
+                qty_df.to_excel(writer,sheet_name="Terlaris (Kuantitas)",index=False) 
                 # Total Pengunjung
-                # ===================
-                traffic_daily.to_excel(
-                    writer,
-                    sheet_name="Total Pengunjung",
-                    index=False
-                )
-                # ===================
+                traffic_daily.to_excel(writer,sheet_name="Total Pengunjung",index=False)
                 # Checkout
-                # ===================
-                checkout_df.to_excel(
-                    writer,
-                    sheet_name="Checkout",
-                    index=False
-                )
-                # ===================
+                checkout_df.to_excel(writer,sheet_name="Checkout",index=False)
                 # Alasan Checkout
-                # ===================
-                alasan_df.to_excel(
-                    writer,
-                    sheet_name="Checkout",index=False
-                    )         
+                alasan_df.to_excel(writer,sheet_name="Checkout",index=False)
+                # Rekomendasi
+                promo_df.to_excel(writer,sheet_name="Rekomendasi Promo",index=False) 
 
-        workbook = writer.book
-        save_chart(workbook,fig1,"Top Words")
-        save_chart(workbook,fig2,"Produk Tanya")
-        save_chart(workbook,fig3,"Jam Chat")
-        save_chart(workbook,fig4,"Jam Jawab")
-        save_chart(workbook,fig5,"Top View")
-        save_chart(workbook,fig6,"Keranjang")
-        save_chart(workbook,fig7,"Terlaris (Uang)")
-        save_chart(workbook,fig8,"Terlaris (Kuantitas)")
-        save_chart(workbook,fig9,"Total Pengunjung")
-        save_chart(workbook,fig10,"Checkout","E2")
-        save_chart(workbook,fig11,"Checkout","E25")
+                workbook = writer.book
+                save_chart(workbook,fig1,"Top Words")
+                save_chart(workbook,fig2,"Produk Tanya")
+                save_chart(workbook,fig3,"Jam Chat")
+                save_chart(workbook,fig4,"Jam Jawab")
+                save_chart(workbook,fig5,"Top View")
+                save_chart(workbook,fig6,"Keranjang")
+                save_chart(workbook,fig7,"Terlaris (Uang)")
+                save_chart(workbook,fig8,"Terlaris (Kuantitas)")
+                save_chart(workbook,fig9,"Total Pengunjung")
+                save_chart(workbook,fig10,"Checkout","E2")
+                save_chart(workbook,fig11,"Checkout","E25")
+                save_chart(workbook, fig_promo,"Rekomendasi Promo")
         output.seek(0)
-with tab4: 
-     
-        col1,col2,col3 = st.columns(3)
-
-        with col1:
-
-            if uploaded_chat:
-
-                st.metric(
-                    "Jumlah Chat",
-                    len(chat_df)
-                )
-        with col2:
-
-            if uploaded_traffic and 'traffic_daily' in locals():
-
-                top_day = traffic_daily.loc[
-                    traffic_daily[col_visitor].idxmax()
-                ]
-
-                st.metric(
-                    "Hari Teramai",
-                    top_day[tanggal_col].strftime("%d-%m-%Y"),
-                    f"{top_day[col_visitor]:,.0f} pengunjung"
-                )
-        with col3:
-
-            if uploaded_chat:
-
-                st.metric(
-                    "Peak Hour",
-                    f"{ramai_chat}:00"
-                    )
+                    
         nama_file_user = st.text_input("Nama file hasil unduhan:", value="hasil_analisis")
 
         if not nama_file_user.endswith(".xlsx"):
