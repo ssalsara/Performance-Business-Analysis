@@ -17,7 +17,7 @@ from nltk.corpus import stopwords
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 
 import nltk
-# nltk.download('stopwords')
+nltk.download('stopwords')
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
 
