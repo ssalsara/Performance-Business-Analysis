@@ -6,3 +6,4 @@ seaborn
 openpyxl
 nltk
 Sastrawi
+scikit-learn
